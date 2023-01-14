@@ -1,0 +1,20 @@
+2023-01-13 22:30:52.990480923  Server listening on 0.0.0.0 port 2222.
+2023-01-13 22:30:52.990501381  Server listening on :: port 2222.
+2023-01-13 22:30:54.025913674  kex_exchange_identification: Connection closed by remote host
+2023-01-13 22:30:54.025917257  Connection closed by 127.0.0.1 port 55864
+2023-01-13 22:31:26.320548466  Received signal 15; terminating.
+2023-01-13 22:52:10.311831627  Server listening on 0.0.0.0 port 2222.
+2023-01-13 22:52:10.311850835  Server listening on :: port 2222.
+2023-01-13 22:52:11.347257378  kex_exchange_identification: Connection closed by remote host
+2023-01-13 22:52:11.347948253  Connection closed by 127.0.0.1 port 34672
+2023-01-13 23:48:30.210427095  Received signal 15; terminating.
+2023-01-13 23:53:46.623467088  Server listening on 0.0.0.0 port 2222.
+2023-01-13 23:53:46.623483546  Server listening on :: port 2222.
+2023-01-13 23:53:47.637607589  kex_exchange_identification: Connection closed by remote host
+2023-01-13 23:53:47.637610089  Connection closed by 127.0.0.1 port 57124
+2023-01-13 23:59:55.630894217  Received signal 15; terminating.
+2023-01-14 00:00:09.129510834  Server listening on 0.0.0.0 port 2222.
+2023-01-14 00:00:09.129530459  Server listening on :: port 2222.
+2023-01-14 00:00:10.146196585  kex_exchange_identification: Connection closed by remote host
+2023-01-14 00:00:10.146199543  Connection closed by 127.0.0.1 port 34630
+2023-01-14 01:51:39.518147250  Received signal 15; terminating.

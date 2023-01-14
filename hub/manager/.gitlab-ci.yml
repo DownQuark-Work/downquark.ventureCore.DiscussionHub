@@ -1,0 +1,407 @@
+include:
+  - local: '/.gitlab-ci/stage-functional-tests-local.yml'
+  - local: '/.gitlab-ci/stage-functional-tests-ssh.yml'
+
+image: xorti/tiki-devops:php-7.1-qa
+
+variables:
+  MYSQL_ROOT_PASSWORD: secret
+  COMPOSER_CACHE_DIR: "$CI_PROJECT_DIR/.composercache"
+  COMPOSER_FLAGS: '--ansi --no-progress --prefer-dist -n'
+  SVN_SCHEDULER_NAME: 'test-tiki-manager-svn'
+  SRC_SCHEDULER_NAME: 'test-tiki-manager-src'
+  INSTANCE_TYPE_SSH: 'ssh'
+  INSTANCE_TYPE_FTP: 'ftp'
+
+stages:
+  - build
+  - quality
+  - unit-tests
+  - pre-functional-tests
+  - functional-tests
+  - package
+  - vendors_update
+
+.composer-cache:
+  cache: &composer-cache
+    key: cache-tiki-manager
+    paths:
+      - vendor/
+      - vendor-bin/
+      - .composercache/files
+  artifacts:
+    paths:
+      - vendor/
+      - vendor-bin/
+    when: on_success
+    expire_in: 1h
+
+.install-composer-script: &install-composer-script
+  - composer install $COMPOSER_FLAGS
+  - composer bin all install $COMPOSER_FLAGS
+
+composer:
+  stage: build
+  script:
+    - *install-composer-script
+  cache:
+    <<: *composer-cache
+
+#
+# Lint
+#
+
+php-53-scripts:
+  image: helder/php-5.3:latest
+  stage: quality
+  script:
+    - php -l scripts/checkversion.php
+    - php -l scripts/package_tar.php
+    - php -l scripts/extract_tar.php
+    - php -l scripts/get_extensions.php
+    - php -l scripts/tiki/backup_database.php
+    - php -l scripts/tiki/get_directory_list.php
+    - php -l scripts/tiki/get_system_config_ini_file.php
+    - php -l scripts/tiki/remote_install_profile.php
+    - php -l scripts/tiki/sqlupgrade.php
+    - php -l scripts/tiki/run_sql_file.php
+    - php -l scripts/tiki/tiki_dbinstall_ftp.php
+    - php -l scripts/tiki/remote_setup_channels.php
+    - php -l scripts/tiki/mysqldump.php
+  needs: []
+  allow_failure: false
+
+phpcs:
+  stage: quality
+  script:
+    - *install-composer-script
+    - git log -m --first-parent -1 --name-only --diff-filter=d --pretty="format:" | grep -v "^$" | sort -u | grep '\.php$' - 2>&1 > /dev/null || { git log -m -1 --name-only && echo && echo 'No files to be processed. Skipping...' && echo && exit 0; }
+    - git log -m -1 --name-only
+    - git log -m --first-parent -1 --name-only --diff-filter=d --pretty="format:" | grep -v "^$" | sort -u | xargs php vendor/squizlabs/php_codesniffer/bin/phpcs -s --runtime-set ignore_warnings_on_exit true
+  allow_failure: true
+  needs:
+    - composer
+  cache:
+    <<: *composer-cache
+    policy: pull
+  only:
+    - master
+
+phpcs-branches:
+  stage: quality
+  variables:
+    SBRANCH: "master"
+  script:
+    - *install-composer-script
+    - git diff --name-status origin/$SBRANCH | grep -v "^D" | cut -c 3- | sort -u | grep '\.php$' - 2>&1 > /dev/null || { git diff --name-status origin/$SBRANCH && echo && echo 'No files to be processed. Skipping...' && echo && exit 0; }
+    - git diff --name-status origin/$SBRANCH
+    - git diff --name-status origin/$SBRANCH | grep -v "^D" | sed -r 's/^R[0-9]+\t(.*)\t(.*)$/R\t\2/' |  cut -c 3- | xargs php vendor/squizlabs/php_codesniffer/bin/phpcs -s --runtime-set ignore_warnings_on_exit true
+  allow_failure: true
+  needs:
+    - composer
+  cache:
+    <<: *composer-cache
+    policy: pull
+  except:
+    - master
+
+.code_quality:
+  image: docker:stable
+  stage: quality
+  variables:
+    DOCKER_DRIVER: overlay2
+    SP_VERSION: 0.85.6
+  allow_failure: true
+  services:
+    - docker:stable-dind
+  script:
+    - docker run
+      --env SOURCE_CODE="$PWD"
+      --volume "$PWD":/code
+      --volume /var/run/docker.sock:/var/run/docker.sock
+      "registry.gitlab.com/gitlab-org/security-products/codequality:$SP_VERSION" /code
+  needs: []
+  artifacts:
+    reports:
+      codequality: gl-code-quality-report.json
+  tags:
+    - docker
+
+#----------------------------------------------------------------------------------------------------------------------#
+# UNIT TESTS SECTION
+#----------------------------------------------------------------------------------------------------------------------#
+unit-tests:
+
+  stage: unit-tests
+  services:
+    - name: mysql:5.6
+      alias: mysql
+  script:
+    - echo 'APP_ENV=gitlab-ci' >> .env
+    - ssh-keygen -t rsa -f ./data/id_rsa -q -P ""
+    - *install-composer-script
+    - composer build-phar
+    - XDEBUG_MODE=coverage ./vendor/bin/phpunit tests/ --group unit --coverage-text --colors=never --log-junit report.xml
+  needs:
+    - composer
+  cache:
+    <<: *composer-cache
+    policy: pull
+  allow_failure: false
+  coverage: '/^\s*Lines:\s*\d+.\d+\%/'
+  artifacts:
+    when: always
+    reports:
+      junit: report.xml
+
+#----------------------------------------------------------------------------------------------------------------------#
+# FUNCTIONAL TESTS SECTION
+#----------------------------------------------------------------------------------------------------------------------#
+.tiki-manager-cache:
+  cache: &tiki-manager-cache
+    key: cache-tiki-$VCS
+    paths:
+      - cache/
+      - vendor/
+      - vendor-bin/
+      - .composercache/files
+
+.cache-warmup-tiki:
+  image: xorti/tiki-devops:php-7.4-qa
+  stage: pre-functional-tests
+  before_script:
+    - source .env.gitlab-ci
+    - *install-composer-script
+  cache:
+    <<: *tiki-manager-cache
+  needs:
+    - composer
+  dependencies:
+    - composer
+
+cache-warmup-tiki-git:
+  extends: .cache-warmup-tiki
+  variables:
+    VCS: git
+  script:
+    - git config --global user.email "${GITLAB_USER_EMAIL}"
+    - git config --global user.name "${GITLAB_USER_NAME}"
+    - TIKI_CACHE=cache/tiki-git-$PREV_VERSION_BRANCH
+    - |
+      if [ ! -d "$TIKI_CACHE" ]; then
+        git clone --depth 1 -b $PREV_VERSION_BRANCH $GIT_TIKIWIKI_URI $TIKI_CACHE;
+      else
+        git -C $TIKI_CACHE pull
+      fi;
+    - composer install -d $TIKI_CACHE/vendor_bundled $COMPOSER_FLAGS --no-dev
+  except:
+    refs:
+      - schedules
+    variables:
+      - $SCHEDULER == $SVN_SCHEDULER_NAME
+      - $SCHEDULER == $SRC_SCHEDULER_NAME
+
+cache-warmup-tiki-svn:
+  extends: .cache-warmup-tiki
+  variables:
+    VCS: svn
+  script:
+    - TIKI_CACHE=cache/tiki-svn-branches_$PREV_VERSION_BRANCH
+    - |
+      if [ ! -d "$TIKI_CACHE" ]; then
+        svn checkout $SVN_TIKIWIKI_URI/branches/$PREV_VERSION_BRANCH $TIKI_CACHE
+      else
+        cd $TIKI_CACHE && svn up
+      fi;
+    - composer install -d $TIKI_CACHE/vendor_bundled $COMPOSER_FLAGS --no-dev
+  only:
+    refs:
+      - schedules
+    variables:
+      - $SCHEDULER == $SVN_SCHEDULER_NAME
+
+download-tiki-src-files:
+  extends: .cache-warmup-tiki
+  script:
+    - |
+      SRC_PATH='data/tiki_src/' &&\
+      if [ ! -f "${SRC_PATH}tiki-${LATEST_SRC_RELEASE}.tar.gz" ]; then wget -nv --directory-prefix=${SRC_PATH} ${URL_LATEST_SRC_RELEASE}; fi; \
+      if [ ! -f "${SRC_PATH}tiki-${PREV_SRC_MINOR_RELEASE}.tar.gz" ]; then wget -nv --directory-prefix=${SRC_PATH} ${URL_PREV_SRC_MINOR_RELEASE}; fi; \
+      if [ ! -f "${SRC_PATH}tiki-${PREV_SRC_MAJOR_RELEASE}.tar.gz" ]; then wget -nv --directory-prefix=${SRC_PATH} ${URL_PREV_SRC_MAJOR_RELEASE}; fi;
+  cache:
+    paths:
+        - data/tiki_src/
+        - cache/
+        - vendor/
+        - vendor-bin/
+        - .composercache/files
+  artifacts:
+    name: tiki-src
+    paths:
+      - data/tiki_src/
+    when: on_success
+  only:
+    refs:
+      - schedules
+    variables:
+      - $SCHEDULER == $SRC_SCHEDULER_NAME
+
+#----------------------------------------------------------------------------------------------------------------------#
+# FUNCTIONAL TESTS SECTION
+#----------------------------------------------------------------------------------------------------------------------#
+
+.setup-env: &setup-env
+  - echo APP_ENV=gitlab-ci >> .env
+  - echo DEFAULT_VCS=$VCS >> .env
+  - cat .env
+
+.setup-keys: &setup-keys
+  - ssh-keygen -t rsa -f ./data/id_rsa -q -P ""
+
+
+.template-tiki-manager-commands:
+  image: xorti/tiki-devops:php-7.4-qa
+  stage: functional-tests
+  services:
+    - name: mysql:5.6
+      alias: mysql
+  before_script:
+    - *setup-env
+    - *setup-keys
+    - *install-composer-script
+  script:
+    - ./vendor/bin/phpunit tests/Command/$TEST_FILE
+  cache:
+    <<: *tiki-manager-cache
+    policy: pull
+  allow_failure: false
+
+.template-tiki-manager-commands-git: &template-tiki-manager-commands-git
+  extends: .template-tiki-manager-commands
+  dependencies:
+    - cache-warmup-tiki-git
+  needs:
+    - cache-warmup-tiki-git
+  before_script:
+    - *setup-env
+    - *setup-keys
+    - *install-composer-script
+    - git config --global user.email "${GITLAB_USER_EMAIL}"
+    - git config --global user.name "${GITLAB_USER_NAME}"
+    - git config --global --add safe.directory "*"
+  except:
+    variables:
+      - $SCHEDULER == $SVN_SCHEDULER_NAME
+      - $SCHEDULER == $SRC_SCHEDULER_NAME
+
+.template-tiki-manager-commands-svn: &template-tiki-manager-commands-svn
+  extends: .template-tiki-manager-commands
+  dependencies:
+    - cache-warmup-tiki-svn
+  needs:
+    - cache-warmup-tiki-svn
+  only:
+    refs:
+      - schedules
+    variables:
+      - $SCHEDULER == $SVN_SCHEDULER_NAME
+
+.template-tiki-manager-commands-src: &template-tiki-manager-commands-src
+  extends: .template-tiki-manager-commands
+  dependencies:
+    - download-tiki-src-files
+  needs:
+    - download-tiki-src-files
+  only:
+    refs:
+      - schedules
+    variables:
+      - $SCHEDULER == $SRC_SCHEDULER_NAME
+
+#----------------------------------------------------------------------------------------------------------------------#
+# PACKAGE SECTION
+#----------------------------------------------------------------------------------------------------------------------#
+
+phar:
+  stage: package
+  script:
+    - composer install $COMPOSER_FLAGS
+    - composer build-phar
+  allow_failure: false
+  needs:
+    - composer
+  cache:
+    <<: *composer-cache
+  artifacts:
+    name: tiki-manager.phar
+    paths:
+      - build/tiki-manager.phar
+    when: on_success
+  only:
+    refs:
+      - master
+      - tags
+
+compressed:
+  stage: package
+  script:
+    - composer install --no-dev $COMPOSER_FLAGS
+    - git log --pretty=fuller 'HEAD^..HEAD' > VERSION
+    - git log --pretty="format:TIKI_MANAGER_GIT_DATE=%cd%nTIKI_MANAGER_GIT_HASH=%h" 'HEAD^..HEAD' --date="format:%Y%m%d%H%M%S" > .version
+    - find config data scripts src vendor .env.dist composer.json composer.lock LICENSE README.md tiki-manager tiki-manager.php VERSION .version -type f -exec chmod 664 {} \;
+    - find config data scripts src vendor .env.dist composer.json composer.lock LICENSE README.md tiki-manager tiki-manager.php VERSION .version -type d -exec chmod 775 {} \;
+    - chmod 775 tiki-manager
+    - tar czvf tiki-manager.tgz config data scripts src vendor .env.dist composer.json composer.lock LICENSE README.md tiki-manager tiki-manager.php VERSION .version
+  allow_failure: false
+  needs:
+    - composer
+  cache:
+    <<: *composer-cache
+  artifacts:
+    name: tiki-manager.tgz
+    paths:
+      - tiki-manager.tgz
+    when: on_success
+  only:
+    refs:
+      - master
+      - tags
+  except:
+    variables:
+      - $SCHEDULER == "update_vendor"
+
+#----------------------------------------------------------------------------------------------------------------------#
+# MAINTENANCE SECTION
+#----------------------------------------------------------------------------------------------------------------------#
+update_vendor_dependencies:
+  stage: vendors_update
+  dependencies:
+    - composer
+  needs:
+    - composer
+  variables:
+    BRANCH_NAME: "${CI_COMMIT_REF_NAME}_vendor_update"
+    COMMIT_MESSAGE: "[UPD] Update ${CI_COMMIT_REF_NAME} vendor dependencies"
+    CI_REPOSITORY_URL: "https://${GITLAB_USER_LOGIN}:${GITLAB_USER_TOKEN}@gitlab.com/${CI_PROJECT_PATH}.git"
+    COMPOSER_DISCARD_CHANGES: "true"
+    COMPOSER_NO_INTERACTION: "1"
+  before_script:
+    - git config --global user.email "${GITLAB_USER_EMAIL}"
+    - git config --global user.name "${GITLAB_USER_NAME}"
+  script:
+    - composer -V | grep "version 2" || composer self-update --2
+    - DATE=`date +%Y%m%d`
+    - BRANCH_NAME="${BRANCH_NAME}_${DATE}"
+    - php scripts/manager/update_vendor.php
+    - if git diff --quiet --exit-code composer.lock; then exit 0; fi;
+    - if git rev-parse --verify ${BRANCH_NAME}; then git branch -D ${BRANCH_NAME}; fi;
+    - git checkout -b ${BRANCH_NAME}
+    - git add composer.lock
+    - git commit -m "${COMMIT_MESSAGE}"
+    - git push ${CI_REPOSITORY_URL} HEAD:${BRANCH_NAME} --quiet
+    - |
+      HOST=${CI_PROJECT_URL} CI_PROJECT_ID=${CI_PROJECT_ID} SOURCE_BRANCH=${BRANCH_NAME} TARGET_BRANCH=${CI_COMMIT_REF_NAME} GITLAB_USER_ID=${GITLAB_USER_ID} PRIVATE_TOKEN=${GITLAB_USER_TOKEN} TARGET_PROJECT_ID=${TARGET_PROJECT_ID} SET_MERGE=${SET_MERGE} \
+      /bin/bash .gitlab-ci/auto_merge_request.sh "${COMMIT_MESSAGE} (${DATE})"
+  only:
+    variables:
+      - $SCHEDULER == "update_vendor"

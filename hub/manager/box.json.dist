@@ -1,0 +1,22 @@
+{
+    "chmod": "0755",
+    "main": "tiki-manager.php",
+    "output": "build/tiki-manager.phar",
+    "directories": [
+        "src",
+        "scripts"
+    ],
+    "files": [
+        "LICENSE",
+        ".env.dist",
+        ".version"
+    ],
+    "finder": [
+        {
+            "name": "*.php",
+            "exclude": ["test", "tests"],
+            "in": "vendor"
+         }
+    ],
+    "stub": true
+}
