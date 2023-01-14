@@ -1,3 +1,10 @@
+## Running Docker Compose
+Docker Desktop cannot be used to launch this due to the use of `${PWD}1 in _docker-compose.yml_.
+To use the **Command Line**:
+  - first run: `% cd <THIS_DIRECTORY> && docker compose up -d`
+  - subsequent: `% cd <THIS_DIRECTORY> && docker compose start`
+
+
 ## After Docker Compose:
 ### There is an issue with running the entrypoint script that causes an infinite loop
 - pretty sure it has to do with the `restart: auto` but need to dig into it

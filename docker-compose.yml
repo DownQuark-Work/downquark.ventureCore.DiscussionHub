@@ -77,4 +77,3 @@ services:
     restart: unless-stopped
 volumes:
   db_relational_manager:
-  # mysql-server:
