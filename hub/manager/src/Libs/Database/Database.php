@@ -116,9 +116,10 @@ class Database
         $config = self::getInstanceDataBaseConfig($db_local_path);
 
         $db = new self($instance);
-        $db->host = $config['host'];
-        $db->user = $config['user'];
-        $db->pass = $config['pass'];
+        $db->host = 'mariadb'; //$config['host'];
+        $db->user = 'mlnck'; //$config['user'];
+        $db->port = '3313'; //$config['user'];
+        // $db->pass = $config['pass'];
         $db->dbname = $config['dbname'];
         $db->type = $config['type'];
 
@@ -250,10 +251,11 @@ class Database
 
     public function query($sql)
     {
-        $args = array(
-            '-u', $this->user,
-            '-p'. escapeshellarg($this->pass),
-            '-h', $this->host,
+        $args = array( // mysql -h mariadb -u mlnck --port 3313
+            '-u', 'mlnck', //$this->user,
+            // '-p'. escapeshellarg($this->pass),
+            '-h', 'mariadb', // $this->host,
+            '--port', '3313',
             '-N',
             '-s'
         );

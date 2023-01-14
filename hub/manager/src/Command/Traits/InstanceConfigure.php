@@ -514,6 +514,7 @@ trait InstanceConfigure
                     }
 
                     $dbname = "{$prefix}_db";
+                    throw new DatabaseErrorException($dbname, '13');
                     if ($dbRoot->databaseExists($dbname)) {
                         $this->logger->warning("Database '$dbname' already exists.");
                         if (!$this->io->confirm('Continue?')) {
@@ -529,7 +530,8 @@ trait InstanceConfigure
         $config = [
             'host' => $dbRoot->host,
             'user' => $dbRoot->user,
-            'pass' => $dbRoot->pass,
+            // 'pass' => $dbRoot->pass,
+            'port' => '3313',
             'database' => $dbRoot->dbname ?: null,
             'prefix' => isset($dbPrefix) ? $dbPrefix : null
         ];
