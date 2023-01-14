@@ -2,13 +2,6 @@
 ## The services in this file should mimic what is `downquark.templateCore.ProjectSqeleton`
 ### this is only to allow for the instance to be run outside of the `git submodule` space
 ## > CAVEAT: `db_relational-manager` changes to `db_relational`
-# working scrx:
-# - https://hub.docker.com/r/linuxserver/openssh-server
-# - https://www.howtogeek.com/devops/how-to-use-docker-to-containerise-php-and-apache/
-# ```
-# a2query -d
-# /usr/lib/apache2/modules/
-# ```
 # /etc/apache2/apache2.conf <-- equivalent of `httpd.conf`
 # /etc/apache2/
 #           |-- apache2.conf
@@ -24,22 +17,20 @@
 name: dq-tiki-manager
 services:
   php:
-    image: php:7.4-apache
+    image: php:7.4-apache # Make sure to view the ReadMe for instructions of how to configure apache _after_ the docker installation
     container_name: apache-php
     restart: always
     ports:
       - 1003:80
     volumes:
-      - ${PWD}/docker-preinit.sh:/var/www/html/docker-preinit.sh
       - ${PWD}/docker-init.sh:/var/run/dq-init.sh
       - ${PWD}/vhosts/dq.conf:/etc/apache2/sites-available/dq.conf
       - ${PWD}/hub:/var/www/html
       ## TODO: why does the below get into an infinite loop?
-      ## for now:
-      ### `% docker exec -it --user root apache-php /bin/bash`
-      ### `root:var/www/html sh /var/run/dq-init.sh
-    # user: root
-    # entrypoint: sh "/var/run/dq-init.sh"
+      # user: root
+      # entrypoint: sh "/var/run/dq-init.sh"
+    links:
+      - mariadb
     environment:
       MYSQL_HOST: mariadb
       MYSQL_USER: root
@@ -55,9 +46,12 @@ services:
       MYSQL_TCP_PORT: 3313
     ports:
       - 3313:3313
+      - 3306:3313
+    expose:
+      - 3313
+      - 80
     volumes:
       - db_relational_manager:/var/lib/mysql
-      # - /opt/homebrew/var/mysql:/var/lib/mysql
       - ${PWD}/db/relational:/var/lib/mysql
   openssh-server:
     image: lscr.io/linuxserver/openssh-server:latest
@@ -83,5 +77,4 @@ services:
     restart: unless-stopped
 volumes:
   db_relational_manager:
-    # external: # true # <-- this makes the db data persistent between runs
-    #   name: "/opt/homebrew/var/mysql/"
+  # mysql-server:

@@ -1,4 +1,6 @@
 #!/bin/bash
+# docker exec -it --user root apache-php /bin/bash
+# sh /var/run/dq-init.sh
 
 DQ_LOADED=$(which ssh) 
 [ $DQ_LOADING ] && exit 1
@@ -15,11 +17,16 @@ apt-get update && apt-get install -y \
     libreadline-dev libwebp-dev  libzip-dev \
     sudo unzip vim zip
 
+echo "find a better way - this was way too much that you don't need"
+apt-get install mariadb-server
+
 echo "enabling sll"
 a2enmod ssl
 
 echo "installing mysqli"
 docker-php-ext-install mysqli && docker-php-ext-enable mysqli
+docker-php-ext-install pdo_mysql
+docker-php-ext-install gd intl bcmath calendar zip
 
 echo "restarting server so installations can take effect"
 service apache2 restart
