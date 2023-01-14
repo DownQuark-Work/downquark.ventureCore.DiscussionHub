@@ -1,3 +1,11 @@
+#DownQuark Discussion Hub Base Instance
+> Use at your own risk
+
+This is intended to be used as a singular instance for _DownQuark_.
+There will be cusom code which will most likely cause breaking changes if depolyed outside of its cuurrent environment.
+Nothing is preventing anyone from cloning/forking/etc, but s upport for any issues that arise will be non-existent.
+
+---
 ## Running Docker Compose
 Docker Desktop cannot be used to launch this due to the use of `${PWD}1 in _docker-compose.yml_.
 To use the **Command Line**:
