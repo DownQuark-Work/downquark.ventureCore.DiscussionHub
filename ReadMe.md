@@ -1,4 +1,4 @@
-#DownQuark Discussion Hub Base Instance
+# DownQuark Discussion Hub Base Instance
 > Use at your own risk
 
 This is intended to be used as a singular instance for _DownQuark_.
