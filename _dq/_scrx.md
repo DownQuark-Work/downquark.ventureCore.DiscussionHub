@@ -3,3 +3,8 @@ https://twessentials.tikiforsmarties.com/Tiki%20Essentials
 
 semantic features, htaccess file can be found:
  - vi qore/_htaccess
+
+
+dq.local:1003
+un:admin
+pw:D0@
