@@ -1,0 +1,23 @@
+# Tiki-manager Ignore
+# Ignore caches, logs and other working directories
+backup/
+cache/
+data/
+logs/
+tmp/
+
+# Version is a generated file
+.version
+
+# Ignore packaging directories
+build/
+
+# Ignore vendor folders, they are managed by composer
+/vendor/
+/vendor-bin/**/vendor
+/vendor-bin/**/composer.lock
+
+# Ignore IDE/Editor files
+.idea/
+.vscode/
+.env

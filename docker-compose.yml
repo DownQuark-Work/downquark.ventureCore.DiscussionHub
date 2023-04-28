@@ -1,0 +1,79 @@
+# cd to this directory and `docker compose up -d`
+## The services in this file should mimic what is `downquark.templateCore.ProjectSqeleton`
+### this is only to allow for the instance to be run outside of the `git submodule` space
+## > CAVEAT: `db_relational-manager` changes to `db_relational`
+# /etc/apache2/apache2.conf <-- equivalent of `httpd.conf`
+# /etc/apache2/
+#           |-- apache2.conf
+#           | `--  ports.conf
+#           |-- mods-enabled
+#           | |-- *.load
+#           | `-- *.conf
+#           |-- conf-enabled
+#           | `-- *.conf
+#           `-- sites-enabled
+#             `-- *.conf
+
+name: dq-tiki-manager
+services:
+  php:
+    image: php:7.4-apache # Make sure to view the ReadMe for instructions of how to configure apache _after_ the docker installation
+    container_name: apache-php
+    restart: always
+    ports:
+      - 1003:80
+    volumes:
+      - ${PWD}/docker-init.sh:/var/run/dq-init.sh
+      - ${PWD}/vhosts/dq.conf:/etc/apache2/sites-available/dq.conf
+      - ${PWD}/hub:/var/www/html
+      ## TODO: why does the below get into an infinite loop?
+      # user: root
+      # entrypoint: sh "/var/run/dq-init.sh"
+    links:
+      - mariadb
+    environment:
+      MYSQL_HOST: mariadb
+      MYSQL_USER: root
+      MYSQL_PASSWORD: root
+      MYSQL_DB: dq_discussion_hub
+  mariadb:
+    image: mariadb:10.5
+    container_name: db-relational-manager
+    environment:
+      MYSQL_ROOT_USER: root 
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: dq_discussion_hub
+      MYSQL_TCP_PORT: 3313
+    ports:
+      - 3313:3313
+      - 3306:3313
+    expose:
+      - 3313
+      - 80
+    volumes:
+      - db_relational_manager:/var/lib/mysql
+      - ${PWD}/db/relational:/var/lib/mysql
+  openssh-server:
+    image: lscr.io/linuxserver/openssh-server:latest
+    container_name: openssh-server
+    # hostname: openssh-server #optional
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Europe/London
+      # - PUBLIC_KEY=yourpublickey #optional
+      # - PUBLIC_KEY_FILE=/path/to/file #optional
+      # - PUBLIC_KEY_DIR=/path/to/directory/containing/_only_/pubkeys #optional
+      # - PUBLIC_KEY_URL=https://github.com/username.keys #optional
+      - SUDO_ACCESS=false #optional
+      - PASSWORD_ACCESS=false #optional
+      # - USER_PASSWORD=password #optional
+      # - USER_PASSWORD_FILE=/path/to/file #optional
+      # - USER_NAME=linuxserver.io #optional
+    volumes:
+      - ${PWD}/hub/config:/etc/ssl/certs/
+    ports:
+      - 2222:2222
+    restart: unless-stopped
+volumes:
+  db_relational_manager:

@@ -1,0 +1,14 @@
+{
+  "name": "dq-wiqi",
+  "packageManager": "yarn@3.5.0",
+  "scripts": {
+    "build": "tiddlywiki dq-wiki --build index",
+    "server:info": "NOTE: should only have to do the below script once",
+    "server:new": "tiddlywiki dq-wiki --init server",
+    "start": "tiddlywiki dq-wiki --listen"
+  },
+  "dependencies": {
+    "tiddlywiki": "^5.2.7",
+    "wiki": "^0.28.1"
+  }
+}
